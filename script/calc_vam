@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+#
+# Script name: calc_vam
+#
+# Description: Script to run calcuation of volume asymmetry measures 
+# based on subject-level VBM data in the UK Biobank.
+#
+# Authors: Xiangzhen Kong (2018, MPI@Nijmegen)
+#
+# Copyright 2018 MPI@Nijmegen
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+echo '------'
+echo 'For calculation of volume asymmetry measures'
+echo 'calc_vam <GM_file> <mask_name_with_absolute_path> <vbm_dir> <asym_dir>'
+echo 'by default, left hemi mask <mask_file_with_absolute_path>_L.nii.gz'
+echo 'right hemi mask <mask_file_with_absolute_path>_R.nii.gz'
+echo '------'
+
+Mask_file=${2//'.nii.gz'/}
+
+if [ -d ${3} ] ; then
+    GM_file_n=${1//'.nii.gz'/}
+    GM_file=${3}/$GM_file_n
+    Asy_dir=${4}
+    
+    # For AI: 2*(L-R)/(L+R)
+    $FSLDIR/bin/fslswapdim $GM_file -x y z ${Asy_dir}/${GM_file_n}_LRflipped
+    $FSLDIR/bin/fslmaths $GM_file -add ${Asy_dir}/${GM_file_n}_LRflipped -div 2 ${Asy_dir}/${GM_file_n}_LRmean -odt float
+    $FSLDIR/bin/fslmaths $GM_file -sub ${Asy_dir}/${GM_file_n}_LRflipped ${Asy_dir}/${GM_file_n}_LRsub -odt float
+    $FSLDIR/bin/fslmaths ${Asy_dir}/${GM_file_n}_LRsub -div ${Asy_dir}/${GM_file_n}_LRmean ${Asy_dir}/${GM_file_n}_AI -odt float
+    
+    $FSLDIR/bin/fslmaths ${Asy_dir}/${GM_file_n}_LRsub -abs ${Asy_dir}/${GM_file_n}_LRsub_abs -odt float
+    $FSLDIR/bin/fslmaths ${Asy_dir}/${GM_file_n}_AI -abs ${Asy_dir}/${GM_file_n}_AI_abs -odt float # with a correlation of 1 with the definition in Nunez et al., 2018
+    
+    # For low2D
+    $FSLDIR/bin/fslmaths $GM_file -mas ${Mask_file}_L -Xmean -mul 91 ${Asy_dir}/${GM_file_n}_colL -odt float
+    $FSLDIR/bin/fslmaths $GM_file -mas ${Mask_file}_R -Xmean -mul 91 ${Asy_dir}/${GM_file_n}_colR -odt float
+    $FSLDIR/bin/fslmaths ${Asy_dir}/${GM_file_n}_colL -sub ${Asy_dir}/${GM_file_n}_colR ${Asy_dir}/${GM_file_n}_colDif -odt float
+    # For low1D
+    $FSLDIR/bin/fslmaths ${Asy_dir}/${GM_file_n}_colL -Zmean -mul 91 ${Asy_dir}/${GM_file_n}_sliL -odt float
+    $FSLDIR/bin/fslmaths ${Asy_dir}/${GM_file_n}_colR -Zmean -mul 91 ${Asy_dir}/${GM_file_n}_sliR -odt float
+    $FSLDIR/bin/fslmaths ${Asy_dir}/${GM_file_n}_sliL -sub ${Asy_dir}/${GM_file_n}_sliR ${Asy_dir}/${GM_file_n}_sliDif -odt float
+    
+    # For low2D with the poles mask
+    if [ -f ${Mask_file}_poles.nii.gz ] ; then
+        $FSLDIR/bin/fslmaths $GM_file -mas ${Mask_file}_poles_L -Xmean -mul 91 ${Asy_dir}/${GM_file_n}_poles_colL -odt float
+        $FSLDIR/bin/fslmaths $GM_file -mas ${Mask_file}_poles_R -Xmean -mul 91 ${Asy_dir}/${GM_file_n}_poles_colR -odt float
+        $FSLDIR/bin/fslmaths ${Asy_dir}/${GM_file_n}_poles_colL -sub ${Asy_dir}/${GM_file_n}_poles_colR ${Asy_dir}/${GM_file_n}_poles_colDif -odt float
+    fi
+fi
+
